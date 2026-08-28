@@ -1,29 +1,36 @@
 name: Release CLI
-run-name: Release ${{ inputs.version }} from ${{ inputs.source_ref }}
+run-name: Release ${{ inputs.source_ref || 'gcp-desktop' }}
 
 on:
+  schedule:
+    - cron: "17 5 * * 1"
   workflow_dispatch:
     inputs:
       version:
-        description: Release version, for example 0.46.1-gcp.1
-        required: true
+        description: Release version; defaults to <crabbox version>-gcp.<UTC stamp>
+        required: false
         type: string
       source_repo:
         description: Crabbox repository to build
-        required: true
+        required: false
         default: gperezmz/crabbox
         type: string
       source_ref:
         description: Branch, tag or commit to build
-        required: true
+        required: false
         default: gcp-desktop
         type: string
+      force:
+        description: Release even when the source commit is already published
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
 
 concurrency:
-  group: crabbox-cli-release-${{ inputs.version }}
+  group: crabbox-cli-release
   cancel-in-progress: false
 
 jobs:
@@ -35,26 +42,53 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.source_repo }}
-          ref: ${{ inputs.source_ref }}
+          repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
+          ref: ${{ inputs.source_ref || 'gcp-desktop' }}
           path: src
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: src/go.mod
-      - name: Record source commit
+      - name: Resolve source commit and version
         id: source
-        run: echo "sha=$(git -C src rev-parse HEAD)" >>"$GITHUB_OUTPUT"
-      - name: Build archives
-        env:
-          CRABBOX_SRC: ${{ github.workspace }}/src
-        run: scripts/build-cli.sh "${{ inputs.version }}"
-      - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ inputs.version }}" dist/* \
+          sha="$(git -C src rev-parse HEAD)"
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+
+          version="${{ inputs.version }}"
+          if [[ -z "$version" ]]; then
+            base="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' src/worker/package.json | head -1)"
+            version="${base}-gcp.$(date -u +%Y%m%d%H%M)"
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+          published="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // ""')"
+          notes="$(gh release view "$published" --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null || true)"
+          if [[ "${{ inputs.force }}" != "true" && "$notes" == *"$sha"* ]]; then
+            echo "skip=true" >>"$GITHUB_OUTPUT"
+            echo "::notice::$sha is already published as $published"
+          else
+            echo "skip=false" >>"$GITHUB_OUTPUT"
+          fi
+      - name: Build archives
+        if: steps.source.outputs.skip == 'false'
+        env:
+          CRABBOX_SRC: ${{ github.workspace }}/src
+        run: scripts/build-cli.sh "${{ steps.source.outputs.version }}"
+      - name: Publish release
+        if: steps.source.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.source.outputs.version }}
+          SOURCE_REPO: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          gh release create "v$VERSION" dist/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "crabbox v${{ inputs.version }}" \
-            --notes "Build of ${{ inputs.source_repo }}@${{ steps.source.outputs.sha }}.
-          Not an upstream release. Crabbox is MIT licensed, see LICENSE in each archive."
+            --title "crabbox v$VERSION" \
+            --notes "Build of $SOURCE_REPO@$SOURCE_SHA.
+
+          Unofficial build. Not affiliated with or endorsed by the Crabbox project; Crabbox is MIT licensed,
+          copyright openclaw, and each archive ships that licence."

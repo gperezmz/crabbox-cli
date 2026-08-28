@@ -22,8 +22,13 @@ Windows archives are `.zip` with `crabbox.exe`.
 
 ## Release
 
-Run the **Release CLI** workflow with a version, and the source repository and ref to build. Release notes
-record the exact source commit. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
+**Release CLI** runs weekly and on demand. It builds whatever `gperezmz/crabbox@gcp-desktop` points at, skips
+the run when that commit is already published, and derives the version from Crabbox's own version plus a UTC
+stamp unless you pass one. Release notes record the exact source commit.
+
+**Upstream check** runs weekly too: it reports how far the fork trails `openclaw/crabbox@main` and opens (or
+updates) one issue here when a rebase is due. Rebasing stays manual — it can conflict, and the coordinator has
+to be redeployed from the rebased tree before new CLI builds go out. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
 `checksums.txt`, each containing the binary and Crabbox's MIT `LICENSE`.
 
 Build locally with the same script:

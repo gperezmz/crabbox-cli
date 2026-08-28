@@ -1,0 +1,86 @@
+name: Upstream check
+run-name: Check ${{ inputs.source_ref || 'gcp-desktop' }} against upstream
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: Fork to check
+        required: false
+        default: gperezmz/crabbox
+        type: string
+      source_ref:
+        description: Fork branch carrying the changes
+        required: false
+        default: gcp-desktop
+        type: string
+      upstream_repo:
+        description: Upstream repository
+        required: false
+        default: openclaw/crabbox
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: crabbox-cli-upstream-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Report how far the fork trails upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
+          ref: ${{ inputs.source_ref || 'gcp-desktop' }}
+          path: src
+          fetch-depth: 0
+      - name: Compare with upstream
+        id: compare
+        working-directory: src
+        env:
+          UPSTREAM: ${{ inputs.upstream_repo || 'openclaw/crabbox' }}
+        run: |
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          git fetch -q upstream main
+          behind="$(git rev-list --count HEAD..upstream/main)"
+          ahead="$(git rev-list --count upstream/main..HEAD)"
+          echo "behind=$behind" >>"$GITHUB_OUTPUT"
+          echo "ahead=$ahead" >>"$GITHUB_OUTPUT"
+          {
+            echo "log<<EOF"
+            git log --oneline --no-decorate HEAD..upstream/main | head -40
+            echo "EOF"
+          } >>"$GITHUB_OUTPUT"
+          printf 'ahead %s, behind %s\n' "$ahead" "$behind" >>"$GITHUB_STEP_SUMMARY"
+      - name: Open or update the rebase reminder
+        if: steps.compare.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEHIND: ${{ steps.compare.outputs.behind }}
+          AHEAD: ${{ steps.compare.outputs.ahead }}
+          LOG: ${{ steps.compare.outputs.log }}
+          BRANCH: ${{ inputs.source_ref || 'gcp-desktop' }}
+        run: |
+          title="Rebase $BRANCH on upstream ($BEHIND commits behind)"
+          body="$BRANCH is $BEHIND commits behind upstream/main and $AHEAD ahead.
+
+          \`\`\`
+          $LOG
+          \`\`\`
+
+          Rebase, run \`go build ./...\`, \`go test ./internal/cli/\` and the worker tests, then re-deploy the
+          coordinator with \`make apply\` before publishing a new CLI build."
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "Rebase $BRANCH in:title" --json number --jq '.[0].number // ""')"
+          if [[ -n "$existing" ]]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
