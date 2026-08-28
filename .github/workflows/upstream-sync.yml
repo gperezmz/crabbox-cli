@@ -52,7 +52,7 @@ jobs:
             echo "present=false" >>"$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
           ref: ${{ inputs.source_ref || 'gcp-desktop' }}
@@ -95,11 +95,11 @@ jobs:
             echo "ok=false" >>"$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: steps.rebase.outputs.ok == 'true'
         with:
           go-version-file: src/go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.rebase.outputs.ok == 'true'
         with:
           node-version-file: src/worker/package.json

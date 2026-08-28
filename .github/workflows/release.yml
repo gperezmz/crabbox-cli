@@ -39,14 +39,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
           ref: ${{ inputs.source_ref || 'gcp-desktop' }}
           path: src
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: src/go.mod
       - name: Resolve source commit and version
