@@ -34,24 +34,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish CLI archives
+  prepare:
+    name: Resolve the source commit and version
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      version: ${{ steps.source.outputs.version }}
+      skip: ${{ steps.source.outputs.skip }}
     steps:
-      - uses: actions/checkout@v7
       - uses: actions/checkout@v7
         with:
           repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
           ref: ${{ inputs.source_ref || 'gcp-desktop' }}
           path: src
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: src/go.mod
-          cache-dependency-path: src/go.sum
-      - name: Resolve source commit and version
-        id: source
+      - id: source
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -73,18 +70,64 @@ jobs:
           else
             echo "skip=false" >>"$GITHUB_OUTPUT"
           fi
-      - name: Build archives
-        if: steps.source.outputs.skip == 'false'
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        target:
+          - darwin/amd64
+          - darwin/arm64
+          - linux/amd64
+          - linux/arm64
+          - windows/amd64
+          - windows/arm64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
+          ref: ${{ needs.prepare.outputs.sha }}
+          path: src
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
+      - name: Build
         env:
           CRABBOX_SRC: ${{ github.workspace }}/src
-        run: scripts/build-cli.sh "${{ steps.source.outputs.version }}"
-      - name: Publish release
-        if: steps.source.outputs.skip == 'false'
+          CRABBOX_TARGETS: ${{ matrix.target }}
+        run: scripts/build-cli.sh "${{ needs.prepare.outputs.version }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: archive-${{ strategy.job-index }}
+          path: dist/crabbox_*
+          retention-days: 1
+
+  publish:
+    name: Publish the release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: archive-*
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && shasum -a 256 ./crabbox_* >checksums.txt && ls -la
+      - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.source.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
           SOURCE_REPO: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           gh release create "v$VERSION" dist/* \
             --repo "$GITHUB_REPOSITORY" \

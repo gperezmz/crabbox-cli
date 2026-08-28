@@ -24,7 +24,8 @@ Windows archives are `.zip` with `crabbox.exe`.
 
 **Release CLI** runs weekly and on demand. It builds whatever `gperezmz/crabbox@gcp-desktop` points at, skips
 the run when that commit is already published, and derives the version from Crabbox's own version plus a UTC
-stamp unless you pass one. Release notes record the exact source commit.
+stamp unless you pass one. The six targets build in parallel, one job each, and a final job collects the
+archives, writes `checksums.txt` and publishes. Release notes record the exact source commit.
 
 **Upstream sync** runs weekly too. When the fork trails `openclaw/crabbox@main` it rebases onto upstream,
 builds, runs the GCP CLI tests, the mint contract test and the worker suite, and opens a pull request on the
