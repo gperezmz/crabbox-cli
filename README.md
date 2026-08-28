@@ -34,8 +34,10 @@ fork's `upstream-sync` branch. It falls back to an issue here when the rebase co
 Merging that pull request is deliberate rather than automatic: it moves the branch both the coordinator and the
 CLI are built from, so `make apply` has to run from the rebased tree before new builds ship.
 
-Set `FORK_TOKEN` (a token with `repo` scope on the fork) for the pull-request path; without it the workflow
-still reports. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
+Set `FORK_TOKEN` for the pull-request path; without it the workflow still rebases, tests and reports. It is a
+fine-grained token on `gperezmz/crabbox` with **Contents: read and write**, **Pull requests: read and write**
+and **Workflows: read and write** — the last one because upstream commits routinely touch
+`.github/workflows/`, and GitHub rejects a token push carrying workflow changes without it. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
 `checksums.txt`, each containing the binary and Crabbox's MIT `LICENSE`.
 
 Build locally with the same script:
