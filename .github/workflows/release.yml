@@ -1,0 +1,60 @@
+name: Release CLI
+run-name: Release ${{ inputs.version }} from ${{ inputs.source_ref }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example 0.46.1-gcp.1
+        required: true
+        type: string
+      source_repo:
+        description: Crabbox repository to build
+        required: true
+        default: gperezmz/crabbox
+        type: string
+      source_ref:
+        description: Branch, tag or commit to build
+        required: true
+        default: gcp-desktop
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crabbox-cli-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish CLI archives
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.source_repo }}
+          ref: ${{ inputs.source_ref }}
+          path: src
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+      - name: Record source commit
+        id: source
+        run: echo "sha=$(git -C src rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+      - name: Build archives
+        env:
+          CRABBOX_SRC: ${{ github.workspace }}/src
+        run: scripts/build-cli.sh "${{ inputs.version }}"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ inputs.version }}" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "crabbox v${{ inputs.version }}" \
+            --notes "Build of ${{ inputs.source_repo }}@${{ steps.source.outputs.sha }}.
+          Not an upstream release. Crabbox is MIT licensed, see LICENSE in each archive."
