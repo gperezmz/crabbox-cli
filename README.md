@@ -37,16 +37,16 @@ archives, writes `checksums.txt` and publishes. Release notes record the exact s
 **Upstream sync** runs daily. When the fork trails `openclaw/crabbox@main` it rebases onto upstream, builds,
 runs the GCP CLI tests, the mint contract test and the worker suite, force-pushes the rebased branch, and
 triggers a release. It opens an issue here instead when the rebase conflicts, the tests fail, or no
-`FORK_TOKEN` secret is set — so a human is only involved when the automation cannot proceed.
+`PUBLISH_TOKEN` secret is set — so a human is only involved when the automation cannot proceed.
 
 The chain is therefore unattended: upstream moves → the fork is rebased and pushed → a release is built and
 published → `release.json` and the Homebrew formula are updated. Only the Crabbox **coordinator** deploy stays
 manual, because it runs from a local checkout and its version is not readable without admin credentials.
 
-Secrets: `FORK_TOKEN`, a fine-grained token on `gperezmz/crabbox` with **Contents**, **Pull requests** and
-**Workflows** write access — the last one because upstream commits routinely touch `.github/workflows/`, and
-GitHub rejects a token push carrying workflow changes without it. `TAP_TOKEN` (falling back to `FORK_TOKEN`)
-needs **Contents: write** on `gperezmz/homebrew-tap`. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
+One secret drives it: `PUBLISH_TOKEN`, a fine-grained token covering `gperezmz/crabbox` and
+`gperezmz/homebrew-tap` with **Contents: write**, plus **Workflows: write** — the latter because upstream
+commits routinely touch `.github/workflows/`, and GitHub rejects a token push carrying workflow changes
+without it. Without the secret the sync still rebases and tests, then reports. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
 `checksums.txt`, each containing the binary and Crabbox's MIT `LICENSE`.
 
 Build locally with the same script:

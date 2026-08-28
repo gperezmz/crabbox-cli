@@ -41,12 +41,12 @@ jobs:
       SOURCE_REF: ${{ inputs.source_ref || 'gcp-desktop' }}
       UPSTREAM: ${{ inputs.upstream_repo || 'openclaw/crabbox' }}
     steps:
-      - name: Check for a fork token
+      - name: Check for the publish token
         id: token
         env:
-          FORK_TOKEN: ${{ secrets.FORK_TOKEN }}
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
         run: |
-          if [[ -n "$FORK_TOKEN" ]]; then
+          if [[ -n "$PUBLISH_TOKEN" ]]; then
             echo "present=true" >>"$GITHUB_OUTPUT"
           else
             echo "present=false" >>"$GITHUB_OUTPUT"
@@ -56,7 +56,7 @@ jobs:
         with:
           repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
           ref: ${{ inputs.source_ref || 'gcp-desktop' }}
-          token: ${{ secrets.FORK_TOKEN || github.token }}
+          token: ${{ secrets.PUBLISH_TOKEN || github.token }}
           path: src
           fetch-depth: 0
 
@@ -151,9 +151,9 @@ jobs:
           elif [[ "$PROVEN" != "success" ]]; then
             reason="the rebase applied cleanly but the build or tests failed: $RUN_URL"
           else
-            reason="no FORK_TOKEN secret is configured here, so the branch could not be pushed. Add a
-          fine-grained token on $SOURCE_REPO with contents, pull-requests and workflows write access as the
-          FORK_TOKEN secret."
+            reason="no PUBLISH_TOKEN secret is configured here, so the branch could not be pushed. Add a
+          fine-grained token on $SOURCE_REPO with contents and workflows write access as the PUBLISH_TOKEN
+          secret."
           fi
           title="Rebase $SOURCE_REF on upstream ($BEHIND commits behind)"
           body="$SOURCE_REF is $BEHIND commits behind $UPSTREAM@main and $reason
