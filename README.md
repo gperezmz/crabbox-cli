@@ -11,6 +11,13 @@ archives, so the fork stays a clean set of changes against upstream.
 ## Install
 
 ```sh
+brew install gperezmz/tap/crabbox        # macOS and Linux
+nix run github:gperezmz/crabbox-cli      # or add the flake as an input
+```
+
+Or take an archive directly:
+
+```sh
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m); [ "$arch" = x86_64 ] && arch=amd64; [ "$arch" = aarch64 ] && arch=arm64
 gh release download --repo ddc-neoris/crabbox-cli --pattern "crabbox_*_${os}_${arch}.tar.gz" --dir /tmp
@@ -22,29 +29,31 @@ Windows archives are `.zip` with `crabbox.exe`.
 
 ## Release
 
-**Release CLI** runs weekly and on demand. It builds whatever `gperezmz/crabbox@gcp-desktop` points at, skips
+**Release CLI** runs daily and on demand. It builds whatever `gperezmz/crabbox@gcp-desktop` points at, skips
 the run when that commit is already published, and derives the version from Crabbox's own version plus a UTC
 stamp unless you pass one. The six targets build in parallel, one job each, and a final job collects the
 archives, writes `checksums.txt` and publishes. Release notes record the exact source commit.
 
-**Upstream sync** runs weekly too. When the fork trails `openclaw/crabbox@main` it rebases onto upstream,
-builds, runs the GCP CLI tests, the mint contract test and the worker suite, and opens a pull request on the
-fork's `upstream-sync` branch. It falls back to an issue here when the rebase conflicts, the tests fail, or no
-`FORK_TOKEN` secret is set.
+**Upstream sync** runs daily. When the fork trails `openclaw/crabbox@main` it rebases onto upstream, builds,
+runs the GCP CLI tests, the mint contract test and the worker suite, force-pushes the rebased branch, and
+triggers a release. It opens an issue here instead when the rebase conflicts, the tests fail, or no
+`FORK_TOKEN` secret is set — so a human is only involved when the automation cannot proceed.
 
-Merging that pull request is deliberate rather than automatic: it moves the branch both the coordinator and the
-CLI are built from, so `make apply` has to run from the rebased tree before new builds ship.
+The chain is therefore unattended: upstream moves → the fork is rebased and pushed → a release is built and
+published → `release.json` and the Homebrew formula are updated. Only the Crabbox **coordinator** deploy stays
+manual, because it runs from a local checkout and its version is not readable without admin credentials.
 
-Set `FORK_TOKEN` for the pull-request path; without it the workflow still rebases, tests and reports. It is a
-fine-grained token on `gperezmz/crabbox` with **Contents: read and write**, **Pull requests: read and write**
-and **Workflows: read and write** — the last one because upstream commits routinely touch
-`.github/workflows/`, and GitHub rejects a token push carrying workflow changes without it. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
+Secrets: `FORK_TOKEN`, a fine-grained token on `gperezmz/crabbox` with **Contents**, **Pull requests** and
+**Workflows** write access — the last one because upstream commits routinely touch `.github/workflows/`, and
+GitHub rejects a token push carrying workflow changes without it. `TAP_TOKEN` (falling back to `FORK_TOKEN`)
+needs **Contents: write** on `gperezmz/homebrew-tap`. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
 `checksums.txt`, each containing the binary and Crabbox's MIT `LICENSE`.
 
 Build locally with the same script:
 
 ```sh
 CRABBOX_SRC=../crabbox-fork scripts/build-cli.sh 0.0.0-dev
+scripts/update-channels.sh 0.0.0-dev dist ../homebrew-tap   # refresh the flake pin and formula
 ```
 
 ## Disclaimer

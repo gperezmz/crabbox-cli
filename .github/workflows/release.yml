@@ -3,7 +3,7 @@ run-name: Release ${{ inputs.source_ref || 'gcp-desktop' }}
 
 on:
   schedule:
-    - cron: "17 5 * * 1"
+    - cron: "17 7 * * *"
   workflow_dispatch:
     inputs:
       version:
@@ -136,3 +136,44 @@ jobs:
 
           Unofficial build. Not affiliated with or endorsed by the Crabbox project; Crabbox is MIT licensed,
           copyright openclaw, and each archive ships that licence."
+
+  channels:
+    name: Update the flake pin and the Homebrew tap
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: gperezmz/homebrew-tap
+          token: ${{ secrets.TAP_TOKEN || secrets.FORK_TOKEN }}
+          path: tap
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: archive-*
+          merge-multiple: true
+      - name: Regenerate checksums
+        run: cd dist && shasum -a 256 ./crabbox_* >checksums.txt
+      - name: Rewrite the flake pin and the formula
+        run: scripts/update-channels.sh "${{ needs.prepare.outputs.version }}" dist tap
+      - name: Commit
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          git config --global user.name "crabbox-cli bot"
+          git config --global user.email "1122459+gperezmz@users.noreply.github.com"
+          if ! git diff --quiet release.json; then
+            git add release.json
+            git commit -m "Pin the flake to $VERSION"
+            git push
+          fi
+          cd tap
+          if ! git diff --quiet; then
+            git add Formula/crabbox.rb
+            git commit -m "crabbox $VERSION"
+            git push
+          fi
