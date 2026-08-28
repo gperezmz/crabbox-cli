@@ -26,9 +26,16 @@ Windows archives are `.zip` with `crabbox.exe`.
 the run when that commit is already published, and derives the version from Crabbox's own version plus a UTC
 stamp unless you pass one. Release notes record the exact source commit.
 
-**Upstream check** runs weekly too: it reports how far the fork trails `openclaw/crabbox@main` and opens (or
-updates) one issue here when a rebase is due. Rebasing stays manual — it can conflict, and the coordinator has
-to be redeployed from the rebased tree before new CLI builds go out. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
+**Upstream sync** runs weekly too. When the fork trails `openclaw/crabbox@main` it rebases onto upstream,
+builds, runs the GCP CLI tests, the mint contract test and the worker suite, and opens a pull request on the
+fork's `upstream-sync` branch. It falls back to an issue here when the rebase conflicts, the tests fail, or no
+`FORK_TOKEN` secret is set.
+
+Merging that pull request is deliberate rather than automatic: it moves the branch both the coordinator and the
+CLI are built from, so `make apply` has to run from the rebased tree before new builds ship.
+
+Set `FORK_TOKEN` (a token with `repo` scope on the fork) for the pull-request path; without it the workflow
+still reports. Archives are `crabbox_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
 `checksums.txt`, each containing the binary and Crabbox's MIT `LICENSE`.
 
 Build locally with the same script:

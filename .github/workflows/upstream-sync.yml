@@ -1,0 +1,182 @@
+name: Upstream sync
+run-name: Sync ${{ inputs.source_ref || 'gcp-desktop' }} with upstream
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: Fork carrying the changes
+        required: false
+        default: gperezmz/crabbox
+        type: string
+      source_ref:
+        description: Fork branch carrying the changes
+        required: false
+        default: gcp-desktop
+        type: string
+      upstream_repo:
+        description: Upstream repository
+        required: false
+        default: openclaw/crabbox
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: crabbox-cli-upstream-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Rebase on upstream and open a pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_REPO: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
+      SOURCE_REF: ${{ inputs.source_ref || 'gcp-desktop' }}
+      UPSTREAM: ${{ inputs.upstream_repo || 'openclaw/crabbox' }}
+      CANDIDATE: upstream-sync
+    steps:
+      - name: Check for a fork token
+        id: token
+        env:
+          FORK_TOKEN: ${{ secrets.FORK_TOKEN }}
+        run: |
+          if [[ -n "$FORK_TOKEN" ]]; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "present=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.source_repo || 'gperezmz/crabbox' }}
+          ref: ${{ inputs.source_ref || 'gcp-desktop' }}
+          token: ${{ secrets.FORK_TOKEN || github.token }}
+          path: src
+          fetch-depth: 0
+
+      - name: Compare with upstream
+        id: compare
+        working-directory: src
+        run: |
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          git fetch -q upstream main
+          behind="$(git rev-list --count HEAD..upstream/main)"
+          echo "behind=$behind" >>"$GITHUB_OUTPUT"
+          {
+            echo "log<<LOGEOF"
+            git log --oneline --no-decorate HEAD..upstream/main | head -40
+            echo "LOGEOF"
+          } >>"$GITHUB_OUTPUT"
+          printf 'behind upstream/main by %s commits\n' "$behind" >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Rebase
+        id: rebase
+        if: steps.compare.outputs.behind != '0'
+        working-directory: src
+        run: |
+          git config user.name "crabbox-cli bot"
+          git config user.email "1122459+gperezmz@users.noreply.github.com"
+          git switch -c "$CANDIDATE"
+          if git rebase upstream/main; then
+            echo "ok=true" >>"$GITHUB_OUTPUT"
+          else
+            {
+              echo "conflicts<<CONFEOF"
+              git diff --name-only --diff-filter=U
+              echo "CONFEOF"
+            } >>"$GITHUB_OUTPUT"
+            git rebase --abort
+            echo "ok=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.rebase.outputs.ok == 'true'
+        with:
+          go-version-file: src/go.mod
+      - uses: actions/setup-node@v4
+        if: steps.rebase.outputs.ok == 'true'
+        with:
+          node-version-file: src/worker/package.json
+
+      - name: Prove the rebased tree
+        id: prove
+        if: steps.rebase.outputs.ok == 'true'
+        continue-on-error: true
+        working-directory: src
+        run: |
+          set -o pipefail
+          go build ./... 2>&1 | tail -30
+          go test ./internal/cli/ -run GCP -count=1 2>&1 | tail -20
+          node --test scripts/mint-gcp-devtools-image.test.js 2>&1 | tail -20
+          npm --prefix worker ci --silent
+          npm --prefix worker run --silent test 2>&1 | tail -20
+
+      - name: Open the pull request
+        id: pr
+        if: steps.rebase.outputs.ok == 'true' && steps.prove.outcome == 'success' && steps.token.outputs.present == 'true'
+        working-directory: src
+        env:
+          GH_TOKEN: ${{ secrets.FORK_TOKEN }}
+        run: |
+          git push --force-with-lease origin "$CANDIDATE"
+          url="$(gh pr list --repo "$SOURCE_REPO" --head "$CANDIDATE" --json url --jq '.[0].url // ""')"
+          if [[ -z "$url" ]]; then
+            url="$(gh pr create --repo "$SOURCE_REPO" --base "$SOURCE_REF" --head "$CANDIDATE" \
+              --title "Rebase $SOURCE_REF on upstream" \
+              --body "Rebased onto $UPSTREAM@main. Go build, the GCP CLI tests, the mint contract test and the worker suite all passed on the rebased tree.
+
+          Merging moves the branch the coordinator and CLI are built from: run \`make apply\` from the rebased tree before publishing a new CLI build, and re-bake if the lease bootstrap changed.")"
+          fi
+          echo "url=$url" >>"$GITHUB_OUTPUT"
+          echo "$url" >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Report what needs a human
+        if: always() && steps.compare.outputs.behind != '0' && (steps.rebase.outputs.ok != 'true' || steps.prove.outcome != 'success' || steps.token.outputs.present != 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEHIND: ${{ steps.compare.outputs.behind }}
+          LOG: ${{ steps.compare.outputs.log }}
+          CONFLICTS: ${{ steps.rebase.outputs.conflicts }}
+          REBASED: ${{ steps.rebase.outputs.ok }}
+          PROVEN: ${{ steps.prove.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [[ "$REBASED" != "true" ]]; then
+            reason="the rebase hit conflicts in:
+          \`\`\`
+          $CONFLICTS
+          \`\`\`"
+          elif [[ "$PROVEN" != "success" ]]; then
+            reason="the rebase applied cleanly but the build or tests failed: $RUN_URL"
+          else
+            reason="no FORK_TOKEN secret is configured here, so the pull request could not be opened. Add a
+          token with \`repo\` scope on $SOURCE_REPO as the FORK_TOKEN secret to let this run open it."
+          fi
+          title="Rebase $SOURCE_REF on upstream ($BEHIND commits behind)"
+          body="$SOURCE_REF is $BEHIND commits behind $UPSTREAM@main and $reason
+
+          \`\`\`
+          $LOG
+          \`\`\`"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "Rebase $SOURCE_REF in:title" --json number --jq '.[0].number // ""')"
+          if [[ -n "$existing" ]]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
+
+      - name: Close the reminder when nothing is pending
+        if: steps.compare.outputs.behind == '0' || steps.pr.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "Rebase $SOURCE_REF in:title" --json number --jq '.[0].number // ""')"
+          [[ -n "$existing" ]] || exit 0
+          gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+            --comment "Handled automatically: ${{ steps.pr.outputs.url || 'the fork is level with upstream' }}"
