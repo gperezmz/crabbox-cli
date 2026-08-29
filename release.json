@@ -1,9 +1,9 @@
 {
-  "version": "0.46.1-gcp.202608280727",
+  "version": "0.47.0-gcp.202608291248",
   "assets": {
-    "aarch64-darwin": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.46.1-gcp.202608280727/crabbox_0.46.1-gcp.202608280727_darwin_arm64.tar.gz", "sha256": "0167441999a34da8ddb7a8acc82f5b111c91dc5bd383b620aebb02a0f20ec164" },
-    "x86_64-darwin": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.46.1-gcp.202608280727/crabbox_0.46.1-gcp.202608280727_darwin_amd64.tar.gz", "sha256": "05cde4772e863bbe6ed82f8502bf11d4d137cb0859cd24cc85ead2df6323edc0" },
-    "aarch64-linux": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.46.1-gcp.202608280727/crabbox_0.46.1-gcp.202608280727_linux_arm64.tar.gz", "sha256": "ce40ce75150dc9c60f3f3d68993e9a914de3bbb315bca8f9308f8ca20b5f4d38" },
-    "x86_64-linux": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.46.1-gcp.202608280727/crabbox_0.46.1-gcp.202608280727_linux_amd64.tar.gz", "sha256": "7ea5c9fc409b645af1f381d06410dad04dfb83a919b4c2e6a20f58746ff2afb2" }
+    "aarch64-darwin": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.47.0-gcp.202608291248/crabbox_0.47.0-gcp.202608291248_darwin_arm64.tar.gz", "sha256": "ddb248bea84064d5a5d4a96f7f08b8b467d243fd5874d79b1993fc3afe8ca8ea" },
+    "x86_64-darwin": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.47.0-gcp.202608291248/crabbox_0.47.0-gcp.202608291248_darwin_amd64.tar.gz", "sha256": "5f264b52246db06600e5b2b28cae8d468530852bf8af757e31dd34f2ec43c5a1" },
+    "aarch64-linux": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.47.0-gcp.202608291248/crabbox_0.47.0-gcp.202608291248_linux_arm64.tar.gz", "sha256": "841ca66016181b1ca762428f57246ab4a42ea0401bbebbf84027893184d8c4ee" },
+    "x86_64-linux": { "url": "https://github.com/gperezmz/crabbox-cli/releases/download/v0.47.0-gcp.202608291248/crabbox_0.47.0-gcp.202608291248_linux_amd64.tar.gz", "sha256": "fd7369befe27fa1e17f4b2d237ec8cf76674da682499006eafb16711825119c2" }
   }
 }
